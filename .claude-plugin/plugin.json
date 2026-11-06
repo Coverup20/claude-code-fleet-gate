@@ -1,6 +1,6 @@
 {
   "name": "fleet-gate",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Fleet Gate Hub - Centralized visual status and secure unlock for Windows Local Gate, PTC Bastion Gate and vm-z1-00 SSH Agent",
   "displayName": "Fleet Gate Hub",
   "author": {
