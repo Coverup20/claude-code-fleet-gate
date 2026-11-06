@@ -1,0 +1,17 @@
+{
+  "name": "fleet-gate",
+  "version": "1.0.0",
+  "description": "Fleet Gate Hub - Centralized visual status and secure unlock for Windows Local Gate, PTC Bastion Gate and vm-z1-00 SSH Agent",
+  "displayName": "Fleet Gate Hub",
+  "author": {
+    "name": "Marzio Bordin"
+  },
+  "license": "MIT",
+  "keywords": [
+    "fleet-gate",
+    "otp",
+    "security",
+    "pane",
+    "mod"
+  ]
+}

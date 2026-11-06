@@ -1,0 +1,16 @@
+{
+  "name": "fleet-gate",
+  "owner": {
+    "name": "Marzio Bordin"
+  },
+  "metadata": {
+    "description": "Fleet Gate Hub - Centralized visual status and secure unlock for Windows Local Gate, PTC Bastion Gate and vm-z1-00 SSH Agent"
+  },
+  "plugins": [
+    {
+      "name": "fleet-gate",
+      "description": "A pane and slash commands for Fleet Gate Hub status, unlock, and lock",
+      "source": "./"
+    }
+  ]
+}
