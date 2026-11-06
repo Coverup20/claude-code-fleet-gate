@@ -2,6 +2,10 @@ import type { Register } from 'claude-code';
 
 const PANE_ID = 'fleet-gate-panel';
 
+const PS_LAUNCH_CMD = '& { $f = if (Test-Path "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1" } elseif (Test-Path "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1" } else { "V:\\.claude\\ptc\\fleet_gate_prompt.ps1" }; & $f }';
+const PS_CHECK_CMD = '& { $f = if (Test-Path "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1" } elseif (Test-Path "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1" } else { "V:\\.claude\\ptc\\fleet_gate_prompt.ps1" }; & $f -CheckOnly }';
+const PS_LOCK_CMD = '& { $f = if (Test-Path "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1" } elseif (Test-Path "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1" } else { "V:\\.claude\\ptc\\fleet_gate_prompt.ps1" }; & $f -LockAll }';
+
 export const register: Register = (on) => {
   // 1. Register Slash Commands
   on('session.start', async ($, e, next) => {
@@ -35,9 +39,12 @@ export const register: Register = (on) => {
     if (e.command === 'fleet-unlock') {
       const res = await $.process.run([
         'powershell.exe',
+        '-STA',
+        '-ExecutionPolicy',
+        'Bypass',
         '-NoProfile',
-        '-File',
-        'V:\\.claude\\ptc\\fleet_gate_prompt.ps1',
+        '-Command',
+        PS_LAUNCH_CMD,
       ]);
       if (res.exitCode === 0) {
         return { text: 'Flotta sbloccata con successo.' };
@@ -47,10 +54,11 @@ export const register: Register = (on) => {
     if (e.command === 'fleet-lock') {
       const res = await $.process.run([
         'powershell.exe',
+        '-ExecutionPolicy',
+        'Bypass',
         '-NoProfile',
-        '-File',
-        'V:\\.claude\\ptc\\fleet_gate_prompt.ps1',
-        '-LockAll',
+        '-Command',
+        PS_LOCK_CMD,
       ]);
       if (res.exitCode === 0) {
         return { text: 'Flotta bloccata con successo.' };
@@ -64,7 +72,6 @@ export const register: Register = (on) => {
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e);
 
-    const helperPath = 'V:\\.claude\\ptc\\fleet_gate_prompt.ps1';
     let localStatus = 'Verifica in corso...';
     let ptcStatus = 'Verifica in corso...';
     let keysStatus = 'Verifica in corso...';
@@ -72,10 +79,11 @@ export const register: Register = (on) => {
     try {
       const res = await $.process.run([
         'powershell.exe',
+        '-ExecutionPolicy',
+        'Bypass',
         '-NoProfile',
-        '-File',
-        helperPath,
-        '-CheckOnly',
+        '-Command',
+        PS_CHECK_CMD,
       ]);
       const stdout = res.stdout.trim();
       for (const line of stdout.split('\n')) {
@@ -134,9 +142,12 @@ export const register: Register = (on) => {
               onPress={async () => {
                 await $.process.run([
                   'powershell.exe',
+                  '-STA',
+                  '-ExecutionPolicy',
+                  'Bypass',
                   '-NoProfile',
-                  '-File',
-                  'V:\\.claude\\ptc\\fleet_gate_prompt.ps1',
+                  '-Command',
+                  PS_LAUNCH_CMD,
                 ]);
                 await $.ui.open({
                   id: PANE_ID,
@@ -152,10 +163,11 @@ export const register: Register = (on) => {
               onPress={async () => {
                 await $.process.run([
                   'powershell.exe',
+                  '-ExecutionPolicy',
+                  'Bypass',
                   '-NoProfile',
-                  '-File',
-                  'V:\\.claude\\ptc\\fleet_gate_prompt.ps1',
-                  '-LockAll',
+                  '-Command',
+                  PS_LOCK_CMD,
                 ]);
                 await $.ui.open({
                   id: PANE_ID,
@@ -169,7 +181,6 @@ export const register: Register = (on) => {
     );
   });
 
-  // 5. In ui.render, ensure you return the JSX tree for the pane and return await next(e) for any other component.
   on('ui.render', async ($, e, next) => {
     return await next(e);
   });
