@@ -26,7 +26,8 @@ Restart Claude Code or run `/reload-plugins` after install or update.
 ## Commands
 
 - `/gate-status`: Open the Fleet Security Gate Hub status pane.
-- `/fleet-unlock`: Launch the secure WPF masked GUI prompt to unlock local gate, remote PTC gate, and SSH keys.
+- `/fleet-unlock`: Launch the secure WPF masked GUI prompt to unlock local gate,
+  remote PTC gate, and SSH keys.
 - `/fleet-lock`: Lock all gates and flush SSH agent keys.
 
 ## License

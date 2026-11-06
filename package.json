@@ -1,6 +1,6 @@
 {
   "name": "claude-code-fleet-gate",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "Fleet Gate Hub - Centralized visual status and secure unlock for Windows Local Gate, PTC Bastion Gate and vm-z1-00 SSH Agent",
   "keywords": [
     "claude-code",

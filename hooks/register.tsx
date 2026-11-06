@@ -47,9 +47,9 @@ export const register: Register = (on) => {
         PS_LAUNCH_CMD,
       ]);
       if (res.exitCode === 0) {
-        return { text: 'Flotta sbloccata con successo.' };
+        return { text: 'Fleet unlocked successfully.' };
       }
-      return { text: 'Errore durante lo sblocco della flotta.' };
+      return { text: 'Error unlocking fleet.' };
     }
     if (e.command === 'fleet-lock') {
       const res = await $.process.run([
@@ -61,9 +61,9 @@ export const register: Register = (on) => {
         PS_LOCK_CMD,
       ]);
       if (res.exitCode === 0) {
-        return { text: 'Flotta bloccata con successo.' };
+        return { text: 'Fleet locked successfully.' };
       }
-      return { text: 'Errore durante il blocco della flotta.' };
+      return { text: 'Error locking fleet.' };
     }
     return await next(e);
   });
@@ -72,9 +72,9 @@ export const register: Register = (on) => {
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e);
 
-    let localStatus = 'Verifica in corso...';
-    let ptcStatus = 'Verifica in corso...';
-    let keysStatus = 'Verifica in corso...';
+    let localStatus = 'Checking...';
+    let ptcStatus = 'Checking...';
+    let keysStatus = 'Checking...';
 
     try {
       const res = await $.process.run([
@@ -97,9 +97,9 @@ export const register: Register = (on) => {
         }
       }
     } catch (err) {
-      localStatus = 'Errore verifica';
-      ptcStatus = 'Errore verifica';
-      keysStatus = 'Errore verifica';
+      localStatus = 'Status check failed';
+      ptcStatus = 'Status check failed';
+      keysStatus = 'Status check failed';
     }
 
     return (
@@ -111,15 +111,15 @@ export const register: Register = (on) => {
         </Box>
         <Box flexDirection="column" marginBottom={1}>
           <Box>
-            <Text bold>1. Gate Locale Windows: </Text>
+            <Text bold>1. Windows Local Gate: </Text>
             <Text color={localStatus.includes('APERTO') ? 'green' : 'red'}>{localStatus}</Text>
           </Box>
           <Box>
-            <Text bold>2. Gate Remoto PTC (vm-z1-00): </Text>
+            <Text bold>2. Remote PTC Gate (vm-z1-00): </Text>
             <Text color={ptcStatus.includes('APERTO') ? 'green' : 'red'}>{ptcStatus}</Text>
           </Box>
           <Box>
-            <Text bold>3. SSH Keys Agent (vm-z1-00): </Text>
+            <Text bold>3. SSH Agent Keys (vm-z1-00): </Text>
             <Text color={keysStatus.includes('LOADED') ? 'green' : 'yellow'}>{keysStatus}</Text>
           </Box>
         </Box>
@@ -127,7 +127,7 @@ export const register: Register = (on) => {
         <Box marginTop={1} flexDirection="row">
           <Button
             key="btn-refresh"
-            label="[ 🔄 Aggiorna Stato ]"
+            label="[ 🔄 Refresh ]"
             onPress={async () => {
               await $.ui.open({
                 id: PANE_ID,
@@ -138,7 +138,7 @@ export const register: Register = (on) => {
           <Box marginLeft={2}>
             <Button
               key="btn-unlock"
-              label="[ 🔑 Sblocca ]"
+              label="[ 🔑 Unlock ]"
               onPress={async () => {
                 await $.process.run([
                   'powershell.exe',
@@ -159,7 +159,7 @@ export const register: Register = (on) => {
           <Box marginLeft={2}>
             <Button
               key="btn-lock"
-              label="[ 🔒 Blocca ]"
+              label="[ 🔒 Lock ]"
               onPress={async () => {
                 await $.process.run([
                   'powershell.exe',
