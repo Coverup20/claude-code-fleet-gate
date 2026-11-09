@@ -2,6 +2,14 @@ import type { Register } from 'claude-code';
 
 const PANE_ID = 'fleet-gate-panel';
 
+// The unlock prompt is a WPF window: the operator types an OTP code there, so
+// the child may stay alive for minutes. $.process.run rejects after 30 s by
+// default, which killed the unlock hook before the operator answered, so the
+// wait is raised to the API's maximum here.
+const CHECK_TIMEOUT_MS = 60000;
+const UNLOCK_TIMEOUT_MS = 600000;
+const LOCK_TIMEOUT_MS = 120000;
+
 const PS_LAUNCH_CMD = '& { $f = if (Test-Path "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1" } elseif (Test-Path "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1" } else { "V:\\.claude\\ptc\\fleet_gate_prompt.ps1" }; & $f }';
 const PS_CHECK_CMD = '& { $f = if (Test-Path "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1" } elseif (Test-Path "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1" } else { "V:\\.claude\\ptc\\fleet_gate_prompt.ps1" }; & $f -CheckOnly }';
 const PS_LOCK_CMD = '& { $f = if (Test-Path "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1" } elseif (Test-Path "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1" } else { "V:\\.claude\\ptc\\fleet_gate_prompt.ps1" }; & $f -LockAll }';
@@ -28,45 +36,44 @@ export const register: Register = (on) => {
   });
 
   // 2. Handle Slash Commands
-  on('command.run', async ($, e, next) => {
-    if (e.command === 'gate-status') {
-      await $.ui.open({
-        id: PANE_ID,
-        title: 'Fleet Security Gate Hub',
-      });
-      return { text: 'Fleet Security Gate Hub panel opened.' };
+  // A registered command has no core behaviour: it is answered by a
+  // `command.run` hook narrowed on its name. A hook that throws is skipped and
+  // the command is left unanswered, so each carries a `.catch` answering for it.
+  on('command.run', { command: 'gate-status' }, async ($) => {
+    await $.ui.open({
+      id: PANE_ID,
+      title: 'Fleet Security Gate Hub',
+    });
+    return { text: 'Fleet Security Gate Hub panel opened.' };
+  }).catch(($, e, next) =>
+    next.called ? next(e) : { text: 'Fleet Gate: could not open the status panel.' },
+  );
+
+  on('command.run', { command: 'fleet-unlock' }, async ($) => {
+    const res = await $.process.run(
+      ['powershell.exe', '-STA', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', PS_LAUNCH_CMD],
+      { timeoutMs: UNLOCK_TIMEOUT_MS },
+    );
+    if (res.exitCode === 0) {
+      return { text: 'Fleet unlocked successfully.' };
     }
-    if (e.command === 'fleet-unlock') {
-      const res = await $.process.run([
-        'powershell.exe',
-        '-STA',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-NoProfile',
-        '-Command',
-        PS_LAUNCH_CMD,
-      ]);
-      if (res.exitCode === 0) {
-        return { text: 'Fleet unlocked successfully.' };
-      }
-      return { text: 'Error unlocking fleet.' };
+    return { text: 'Error unlocking fleet.' };
+  }).catch(($, e, next) =>
+    next.called ? next(e) : { text: 'Fleet unlock prompt got no answer (timeout or error).' },
+  );
+
+  on('command.run', { command: 'fleet-lock' }, async ($) => {
+    const res = await $.process.run(
+      ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', PS_LOCK_CMD],
+      { timeoutMs: LOCK_TIMEOUT_MS },
+    );
+    if (res.exitCode === 0) {
+      return { text: 'Fleet locked successfully.' };
     }
-    if (e.command === 'fleet-lock') {
-      const res = await $.process.run([
-        'powershell.exe',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-NoProfile',
-        '-Command',
-        PS_LOCK_CMD,
-      ]);
-      if (res.exitCode === 0) {
-        return { text: 'Fleet locked successfully.' };
-      }
-      return { text: 'Error locking fleet.' };
-    }
-    return await next(e);
-  });
+    return { text: 'Error locking fleet.' };
+  }).catch(($, e, next) =>
+    next.called ? next(e) : { text: 'Fleet lock did not complete (timeout or error).' },
+  );
 
   // 3. Render Status Pane
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
@@ -77,14 +84,10 @@ export const register: Register = (on) => {
     let keysStatus = 'Checking...';
 
     try {
-      const res = await $.process.run([
-        'powershell.exe',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-NoProfile',
-        '-Command',
-        PS_CHECK_CMD,
-      ]);
+      const res = await $.process.run(
+        ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', PS_CHECK_CMD],
+        { timeoutMs: CHECK_TIMEOUT_MS },
+      );
       const stdout = res.stdout.trim();
       for (const line of stdout.split('\n')) {
         if (line.startsWith('STATUS|')) {
@@ -112,11 +115,11 @@ export const register: Register = (on) => {
         <Box flexDirection="column" marginBottom={1}>
           <Box>
             <Text bold>1. Windows Local Gate: </Text>
-            <Text color={localStatus.includes('APERTO') ? 'green' : 'red'}>{localStatus}</Text>
+            <Text color={localStatus.includes('OPEN') || localStatus.includes('APERTO') ? 'green' : 'red'}>{localStatus}</Text>
           </Box>
           <Box>
             <Text bold>2. Remote PTC Gate (vm-z1-00): </Text>
-            <Text color={ptcStatus.includes('APERTO') ? 'green' : 'red'}>{ptcStatus}</Text>
+            <Text color={ptcStatus.includes('OPEN') || ptcStatus.includes('APERTO') ? 'green' : 'red'}>{ptcStatus}</Text>
           </Box>
           <Box>
             <Text bold>3. SSH Agent Keys (vm-z1-00): </Text>
@@ -140,15 +143,10 @@ export const register: Register = (on) => {
               key="btn-unlock"
               label="[ 🔑 Unlock ]"
               onPress={async () => {
-                await $.process.run([
-                  'powershell.exe',
-                  '-STA',
-                  '-ExecutionPolicy',
-                  'Bypass',
-                  '-NoProfile',
-                  '-Command',
-                  PS_LAUNCH_CMD,
-                ]);
+                await $.process.run(
+                  ['powershell.exe', '-STA', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', PS_LAUNCH_CMD],
+                  { timeoutMs: UNLOCK_TIMEOUT_MS },
+                );
                 await $.ui.open({
                   id: PANE_ID,
                   title: 'Fleet Security Gate Hub',
@@ -161,14 +159,10 @@ export const register: Register = (on) => {
               key="btn-lock"
               label="[ 🔒 Lock ]"
               onPress={async () => {
-                await $.process.run([
-                  'powershell.exe',
-                  '-ExecutionPolicy',
-                  'Bypass',
-                  '-NoProfile',
-                  '-Command',
-                  PS_LOCK_CMD,
-                ]);
+                await $.process.run(
+                  ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', PS_LOCK_CMD],
+                  { timeoutMs: LOCK_TIMEOUT_MS },
+                );
                 await $.ui.open({
                   id: PANE_ID,
                   title: 'Fleet Security Gate Hub',
