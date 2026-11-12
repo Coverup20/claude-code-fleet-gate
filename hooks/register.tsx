@@ -14,6 +14,15 @@ const PS_LAUNCH_CMD = '& { $f = if (Test-Path "$env:USERPROFILE\\.claude\\ptc\\f
 const PS_CHECK_CMD = '& { $f = if (Test-Path "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1" } elseif (Test-Path "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1" } else { "V:\\.claude\\ptc\\fleet_gate_prompt.ps1" }; & $f -CheckOnly }';
 const PS_LOCK_CMD = '& { $f = if (Test-Path "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$env:USERPROFILE\\.claude\\ptc\\fleet_gate_prompt.ps1" } elseif (Test-Path "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1") { "$HOME\\.claude\\ptc\\fleet_gate_prompt.ps1" } else { "V:\\.claude\\ptc\\fleet_gate_prompt.ps1" }; & $f -LockAll }';
 
+function commandName(value: unknown): string {
+  // Accept 'fleet-unlock', 'fleet-gate:fleet-unlock' and '/fleet-unlock':
+  // a leading slash was observed to leave the handler unmatched, which makes
+  // the command look unanswered even though the hook is registered.
+  const raw = String(value ?? '').trim().replace(/^\//, '');
+  const last = raw.includes(':') ? raw.split(':').pop() || raw : raw;
+  return last.replace(/^\//, '');
+}
+
 export const register: Register = (on) => {
   // 1. Register Slash Commands
   on('session.start', async ($, e, next) => {
@@ -35,44 +44,47 @@ export const register: Register = (on) => {
     return next(e);
   });
 
-  // 2. Handle Slash Commands
-  // A registered command has no core behaviour: it is answered by a
-  // `command.run` hook narrowed on its name. A hook that throws is skipped and
-  // the command is left unanswered, so each carries a `.catch` answering for it.
-  on('command.run', { command: 'gate-status' }, async ($) => {
-    await $.ui.open({
-      id: PANE_ID,
-      title: 'Fleet Security Gate Hub',
-    });
-    return { text: 'Fleet Security Gate Hub panel opened.' };
-  }).catch(($, e, next) =>
-    next.called ? next(e) : { text: 'Fleet Gate: could not open the status panel.' },
-  );
+  // 2. Handle Slash Commands.
+  // Use a single generic command.run hook and dispatch on e.command: on
+  // Claude Code 2.1.322 the matcher form `{ command: 'fleet-unlock' }` no
+  // longer reached the handler and the command was left unanswered. A hook
+  // that throws is skipped, so the whole handler carries a .catch.
+  on('command.run', async ($, e, next) => {
+    const name = commandName(e.command);
 
-  on('command.run', { command: 'fleet-unlock' }, async ($) => {
-    const res = await $.process.run(
-      ['powershell.exe', '-STA', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', PS_LAUNCH_CMD],
-      { timeoutMs: UNLOCK_TIMEOUT_MS },
-    );
-    if (res.exitCode === 0) {
-      return { text: 'Fleet unlocked successfully.' };
+    if (name === 'gate-status') {
+      await $.ui.open({
+        id: PANE_ID,
+        title: 'Fleet Security Gate Hub',
+      });
+      return { text: 'Fleet Security Gate Hub panel opened.' };
     }
-    return { text: 'Error unlocking fleet.' };
-  }).catch(($, e, next) =>
-    next.called ? next(e) : { text: 'Fleet unlock prompt got no answer (timeout or error).' },
-  );
 
-  on('command.run', { command: 'fleet-lock' }, async ($) => {
-    const res = await $.process.run(
-      ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', PS_LOCK_CMD],
-      { timeoutMs: LOCK_TIMEOUT_MS },
-    );
-    if (res.exitCode === 0) {
-      return { text: 'Fleet locked successfully.' };
+    if (name === 'fleet-unlock') {
+      const res = await $.process.run(
+        ['powershell.exe', '-STA', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', PS_LAUNCH_CMD],
+        { timeoutMs: UNLOCK_TIMEOUT_MS },
+      );
+      if (res.exitCode === 0) {
+        return { text: 'Fleet unlocked successfully.' };
+      }
+      return { text: 'Error unlocking fleet.' };
     }
-    return { text: 'Error locking fleet.' };
+
+    if (name === 'fleet-lock') {
+      const res = await $.process.run(
+        ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', PS_LOCK_CMD],
+        { timeoutMs: LOCK_TIMEOUT_MS },
+      );
+      if (res.exitCode === 0) {
+        return { text: 'Fleet locked successfully.' };
+      }
+      return { text: 'Error locking fleet.' };
+    }
+
+    return await next(e);
   }).catch(($, e, next) =>
-    next.called ? next(e) : { text: 'Fleet lock did not complete (timeout or error).' },
+    next.called ? next(e) : { text: 'Fleet gate command did not complete (timeout or error).' },
   );
 
   // 3. Render Status Pane
